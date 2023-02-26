@@ -1,3 +1,10 @@
+"""Define methods for downloading data from eodhistoricaldata.com.
+
+This file contains the core logic used for downloading and caching
+data from eodhistoricaldata.com.
+"""
+
+
 import datetime
 import functools
 import json
@@ -11,6 +18,7 @@ from typing import Optional, Union
 from enum import Enum
 
 class EODDataTypes(Enum):
+    """An Enum class enumerating the various available data sets."""
     EXCHANGE_LIST = 'exchange_list'
     EXCHANGE_SYMBOLS = 'exchange_symbols'
     HISTORICAL_TIME_SERIES = 'historical_time_series'
@@ -19,7 +27,12 @@ class EODDataTypes(Enum):
 
 
 class DBHelper:
-    def __init__(self, base_path):
+    """A helper class for caching data and fetching cached data.
+
+    Given a user-specified file path, this class will save different
+    data sets into different subdirectories.
+    """
+    def __init__(self, base_path: str) -> None:
         self.base_path = base_path  # where data is cached
 
     def get_cached_data(
@@ -111,7 +124,8 @@ class DBHelper:
         as_of_date: Union[str, datetime.date, datetime.datetime, pd.Timestamp],    
         exchange: Optional[str] = None,
         **kwargs) -> str:
-        """Get the filename for a cached data set."""
+        """Get the filename for a cached data set.
+        """
         data_path = self._get_cached_data_path(data_type, exchange=exchange, **kwargs)
         file_type = self._get_file_extension_type(data_type)
         date_str = pd.Timestamp(as_of_date).strftime('%Y%m%d')
@@ -125,8 +139,7 @@ class DBHelper:
             return 'json'
         else:
             raise ValueError(f'Unsupported data type: {data_type}')        
-        
-        
+
     def _get_default_stale_days(self, data_type: str) -> int:
         if data_type in (EODDataTypes.EXCHANGE_LIST.value,
                          EODDataTypes.EXCHANGE_SYMBOLS.value):
@@ -157,6 +170,8 @@ class DBHelper:
 
 
 class EODHelper():
+    """A class that allows fetching data from eodhistoricaldata.
+    """
     def __init__(self, api_token: str, base_path: str = '/tmp') -> None:
         self.api_token = api_token
         self.db_helper = DBHelper(base_path)  # class to help get/save data from/to DB
