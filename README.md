@@ -11,7 +11,7 @@ Distributed under the MIT license. See ``LICENSE`` for more information.
 # Overview
 
 This package's core functionality mostly encapsulates other packages'
-existing functionality for fetching data from eodhistoricaldata.com - especially the `eod` and `eodhd` packages.
+existing functionality for fetching data from eodhistoricaldata.com - especially the [eod](https://github.com/LautaroParada/eod-data) and [eodhd](https://github.com/EodHistoricalData/EODHD-APIs-Python-Financial-Library) packages.
 
 There are two main reasons for building this package:
 
