@@ -90,7 +90,7 @@ class EODHelper():
             symbol=symbol, 
             exchange_id='US' if exchange_id in US_EXCHANGES else exchange_id,
             start=start, end=end, frequency=frequency, duration=duration,
-            stale_days=stale_days)
+            stale_days=stale_days, as_of_date=end)
 
     def get_market_cap(
         self,
@@ -107,8 +107,7 @@ class EODHelper():
             symbol=symbol, 
             exchange_id='US' if exchange_id in US_EXCHANGES else exchange_id,
             start=start, end=end, frequency=frequency, duration=duration,
-            stale_days=stale_days)
-
+            stale_days=stale_days, as_of_date=end)
 
 
 class AbstractDataGetter(ABC):
@@ -132,7 +131,7 @@ class AbstractDataGetter(ABC):
         pass
 
     @abstractmethod
-    def get_data_from_eod(self, **kwargs):
+    def get_data_from_server(self, **kwargs):
         pass
 
     @abstractmethod
@@ -143,20 +142,24 @@ class AbstractDataGetter(ABC):
     def get_cached_data_path(self, **kwargs) -> str:
         pass
 
-    def get_data(self, stale_days: Optional[int] = None, **kwargs):
+    def get_data(
+            self, 
+            as_of_date: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
+            stale_days: Optional[int] = None, **kwargs):
         # If user specifies stale days, use it instead of default
         if stale_days is None:
             stale_days = self.default_stale_days
 
         cached_filename = self.find_cached_data_filename(
-            stale_days=stale_days, **kwargs)
+            as_of_date=as_of_date, stale_days=stale_days, **kwargs)
         if cached_filename:
             print('Getting cached data')
-            return self.get_data_from_cache(stale_days=stale_days, **kwargs)
+            return self.get_data_from_cache(
+                stale_days=stale_days, as_of_date=as_of_date, **kwargs)
         else:
             print('Fetching')
-            data = self.get_data_from_eod(**kwargs)
-            self.cache_data(data, **kwargs)
+            data = self.get_data_from_server(**kwargs)
+            self.cache_data(data, as_of_date=as_of_date, **kwargs)
             return data
     
     def cache_data(
@@ -276,7 +279,7 @@ class ExchangeListDataGetter(AbstractDataGetter):
         return EODDataTypes.EXCHANGE_LIST.value
 
     # Implementing abstract method
-    def get_data_from_eod(self) -> pd.DataFrame:
+    def get_data_from_server(self) -> pd.DataFrame:
         return self.eodhd_client.get_exchanges()
 
     # Implementing abstract method    
@@ -300,7 +303,7 @@ class ExchangeSymbolsDataGetter(AbstractDataGetter):
         return EODDataTypes.EXCHANGE_SYMBOLS.value
 
     # Implementing abstract method
-    def get_data_from_eod(self, exchange: Optional[str] = '') -> pd.DataFrame:
+    def get_data_from_server(self, exchange: Optional[str] = '') -> pd.DataFrame:
         return self.eodhd_client.get_exchange_symbols(exchange)
 
     # Implementing abstract method    
@@ -327,7 +330,7 @@ class AbstractHistoricalTimeSeriesDataGetter(AbstractDataGetter):
         pass
 
     # Implementing abstract method
-    def get_data_from_eod(
+    def get_data_from_server(
             self,
             symbol: str, 
             exchange_id: str = 'US',
@@ -441,7 +444,7 @@ class FundamentalEquityDataGetter(AbstractDataGetter):
         return EODDataTypes.FUNDAMENTAL_EQUITY.value
 
     # Implementing abstract method
-    def get_data_from_eod(self,
+    def get_data_from_server(self,
                           exchange: Optional[str] = None,
                           symbols: str = '',
                           max_requests=200) -> dict:
