@@ -61,7 +61,13 @@ exchange_symbols = eod_helper.get_exchange_symbols(exchange='NYSE')
 ```
 Note that passing `exchange='US'` into this function will return symbol info for all major US stock exchanges (including OTC/PINK).
 
-To download fundamental equity data, run
+
+To get historical time series data, run:
+```
+eod_helper.get_historical_data(symbol='MSFT', frequency='1d')
+```
+
+To download fundamental equity data for AAPL, you would run
 ```
 fundamental_data = eod_helper.get_fundamental_equity(exchange="NASDAQ", symbol="AAPL")
 ```
