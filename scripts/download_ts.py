@@ -1,9 +1,10 @@
-import eodhistdata
-from eodhistdata.private_constants import API_TOKEN, BASE_PATH
-
 import argparse
 import sys
 import time
+
+from eodhistdata import EODHelper
+from eodhistdata.constants import EXCLUDED_EXCHANGES
+from eodhistdata.private_constants import API_TOKEN, BASE_PATH
 
 
 def main(argv):
@@ -23,13 +24,12 @@ def main(argv):
                         type=int, default=0)
     args = parser.parse_args()
         
-    eod_helper = eodhistdata.EODHelper(
+    eod_helper = EODHelper(
         api_token=API_TOKEN, base_path=BASE_PATH)
 
     exchange_symbols = eod_helper.get_exchange_symbols(
         exchange=args.exchange_id)
 
-    EXCLUDED_EXCHANGES = ('US', 'NMFQS', 'nan')
     idx = ~exchange_symbols.Exchange.isin(EXCLUDED_EXCHANGES)
     symbol_errors = []
     for symbol in exchange_symbols.loc[idx].Code.values:
