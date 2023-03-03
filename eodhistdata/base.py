@@ -9,6 +9,7 @@ import functools
 import json
 import pandas as pd
 import eodhd.apiclient
+import requests
 import tqdm
 
 import os
@@ -49,32 +50,6 @@ class EODHelper():
         data_getter = self._get_data_getter(data_type)
         return data_getter.get_data(exchange=exchange, stale_days=stale_days)
 
-    def get_fundamentals_bulk(self,
-                              exchange: Optional[str] = None,
-                              symbols: str = '',
-                              max_requests=200,
-                              stale_days: Optional[str] = None) -> dict:
-        """Get fundamental data for many instruments simultaneously.
-        
-        Arguments:
-            exchange: the exchange for which we want to get all symbols.
-            symbols: restrict request to a comma-separated subset of the exchange's symbols.
-            limit: the maximum number of symbols to return
-            offset: the offset of all of exchange's symbols with which to begin the request.
-        """
-        data_type = EODDataTypes.FUNDAMENTAL_EQUITY.value
-        data_getter = self._get_data_getter(data_type)
-        return data_getter.get_data(exchange=exchange, symbols=symbols,
-                                    max_requests=max_requests, stale_days=stale_days)
-
-    def get_fundamental_equity(self,
-                               exchange: Optional[str] = None,
-                               symbol: str = '',
-                               **query_params) -> dict:
-        exchange_id = 'US' if exchange in US_EXCHANGES else exchange
-        ticker = f'{symbol}.{exchange_id}'
-        return self.eod_client.get_fundamental_equity(ticker, **query_params)
-
     def get_historical_data(
         self,
         symbol: str, 
@@ -108,6 +83,33 @@ class EODHelper():
             exchange_id='US' if exchange_id in US_EXCHANGES else exchange_id,
             start=start, end=end, frequency=frequency, duration=duration,
             stale_days=stale_days, as_of_date=end)
+
+    def get_fundamental_equity(self,
+                               symbol: str = '',
+                               exchange_id: str = 'US',
+                               stale_days: Optional[str] = None) -> dict:
+        data_type = EODDataTypes.FUNDAMENTAL_EQUITY.value
+        data_getter = self._get_data_getter(data_type)
+        return data_getter.get_data(
+            symbol=symbol, exchange_id=exchange_id, stale_days=stale_days)
+
+    def get_fundamentals_bulk(self,
+                              exchange: Optional[str] = None,
+                              symbols: str = '',
+                              max_requests=200,
+                              stale_days: Optional[str] = None) -> dict:
+        """Get fundamental data for many instruments simultaneously.
+        
+        Arguments:
+            exchange: the exchange for which we want to get all symbols.
+            symbols: restrict request to a comma-separated subset of the exchange's symbols.
+            limit: the maximum number of symbols to return
+            offset: the offset of all of exchange's symbols with which to begin the request.
+        """
+        data_type = EODDataTypes.FUNDAMENTAL_EQUITY.value
+        data_getter = self._get_data_getter(data_type)
+        return data_getter.get_data(exchange=exchange, symbols=symbols,
+                                    max_requests=max_requests, stale_days=stale_days)
 
 
 class AbstractDataGetter(ABC):
@@ -433,7 +435,7 @@ class MarketCapDataGetter(AbstractHistoricalTimeSeriesDataGetter):
 
 
 class FundamentalEquityDataGetter(AbstractDataGetter):
-    """A class for caching data and fetching cached data.
+    """A class for caching data and fetching fundamental equity data.
 
     Given a user-specified file path, this class will save different
     data sets into different subdirectories.
@@ -442,6 +444,39 @@ class FundamentalEquityDataGetter(AbstractDataGetter):
     @property
     def data_type(self) -> str:
         return EODDataTypes.FUNDAMENTAL_EQUITY.value
+
+    # Implementing abstract method
+    def get_data_from_server(
+            self, symbol: str = '', exchange_id: str = 'US') -> dict:
+        if exchange_id in US_EXCHANGES:
+            exchange_id = 'US'
+
+        url = ('https://eodhistoricaldata.com/api/fundamentals/'
+               f'{symbol}.{exchange_id}?api_token={self.api_token}')
+        response = requests.get(url)
+        return json.loads(response.text)
+
+    # Implementing abstract method    
+    def get_file_extension_type(self) -> str:
+        return 'json'
+
+    # Implementing abstract method
+    def get_cached_data_path(self, symbol: str = '', exchange_id: str = 'US', **kwargs) -> str:
+        if exchange_id is None:
+            raise ValueError('The exchange ID must be provided.')
+        return os.path.join(self.base_path, self.data_type, exchange_id, symbol)
+
+
+class FundamentalEquityBulkDataGetter(AbstractDataGetter):
+    """A class for caching data and fetching cached fundamental equity data.
+
+    Given a user-specified file path, this class will save different
+    data sets into different subdirectories.
+    """
+    # Implementing abstract method    
+    @property
+    def data_type(self) -> str:
+        return EODDataTypes.FUNDAMENTAL_EQUITY_BULK.value
 
     # Implementing abstract method
     def get_data_from_server(self,
@@ -471,7 +506,7 @@ class FundamentalEquityDataGetter(AbstractDataGetter):
     def get_cached_data_path(self, exchange: str = '', **kwargs) -> str:
         if exchange is None:
             raise ValueError('The exchange ID must be provided.')
-        return os.path.join(self.base_path, self.data_type, exchange)        
+        return os.path.join(self.base_path, self.data_type, exchange)  
 
 
 # Factory method for getting an instance of the object
@@ -491,6 +526,9 @@ def get_cache_helper(api_token: str, data_type: str, base_path: str):
             api_token=api_token, base_path=base_path, default_stale_days=0)
     if data_type == EODDataTypes.FUNDAMENTAL_EQUITY.value:
         return FundamentalEquityDataGetter(
+            api_token=api_token, base_path=base_path, default_stale_days=30)
+    if data_type == EODDataTypes.FUNDAMENTAL_EQUITY_BULK.value:
+        return FundamentalEquityBulkDataGetter(
             api_token=api_token, base_path=base_path, default_stale_days=30)
     else:
         raise ValueError(f'Unsupported data type: {data_type}')
