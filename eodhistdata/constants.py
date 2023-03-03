@@ -9,9 +9,12 @@ class EODDataTypes(Enum):
     HISTORICAL_TIME_SERIES = 'historical_time_series'
     MARKET_CAP = 'market_cap'
     FUNDAMENTAL_EQUITY = 'fundamental_equity'
+    FUNDAMENTAL_EQUITY_BULK = 'fundamental_equity_bulk'    
 
 # A list of the exchange codes that use exchange_id == 'US'
 US_EXCHANGES = [
     'AMEX', 'BATS', 'NASDAQ', 'NMFQS', 'NYSE', 'NYSE ARCA',
     'NYSE MKT', 'OTC', 'OTCBB', 'OTCCE', 'OTCGREY', 'OTCMKTS',
     'OTCQB', 'OTCQX', 'PINK']
+
+EXCLUDED_EXCHANGES = ('US', 'NMFQS', 'nan', 'PINK')
