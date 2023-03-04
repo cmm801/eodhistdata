@@ -17,4 +17,5 @@ US_EXCHANGES = [
     'NYSE MKT', 'OTC', 'OTCBB', 'OTCCE', 'OTCGREY', 'OTCMKTS',
     'OTCQB', 'OTCQX', 'PINK']
 
-EXCLUDED_EXCHANGES = ('US', 'NMFQS', 'nan', 'PINK')
+# A list of exchanges we can ignore
+EXCLUDED_EXCHANGES = ('NMFQS', 'PINK')

@@ -4,6 +4,7 @@ This file contains the core logic used for downloading and caching
 data from eodhistoricaldata.com.
 """
 
+import concurrent.futures
 import datetime
 import functools
 import json
@@ -19,7 +20,7 @@ from abc import ABC, abstractmethod
 from eod import EodHistoricalData
 from typing import Optional, Union
 
-from eodhistdata.constants import EODDataTypes, US_EXCHANGES
+from eodhistdata.constants import EODDataTypes, US_EXCHANGES, EXCLUDED_EXCHANGES
 
 
 class EODHelper():
@@ -49,6 +50,15 @@ class EODHelper():
         data_type = EODDataTypes.EXCHANGE_SYMBOLS.value
         data_getter = self._get_data_getter(data_type)
         return data_getter.get_data(exchange=exchange, stale_days=stale_days)
+
+    def get_non_excluded_exchange_symbols(self, exchange_id: str = 'US'):
+        """Get the list of all symbols in non-excluded exchanges."""
+        exchange_symbols = self.get_exchange_symbols(exchange=exchange_id)
+        exchange_symbols = exchange_symbols.query('Type == "Common Stock"')
+        idx = exchange_symbols.Code.notna() & exchange_symbols.Exchange.notna()
+        exchange_symbols = exchange_symbols.loc[idx]
+        idx_good_exchanges = ~exchange_symbols.Exchange.isin(EXCLUDED_EXCHANGES)
+        return list(set(exchange_symbols.loc[idx_good_exchanges, 'Code']))
 
     def get_historical_data(
         self,
@@ -99,7 +109,7 @@ class EODHelper():
                               max_requests=200,
                               stale_days: Optional[str] = None) -> dict:
         """Get fundamental data for many instruments simultaneously.
-        
+
         Arguments:
             exchange: the exchange for which we want to get all symbols.
             symbols: restrict request to a comma-separated subset of the exchange's symbols.
@@ -110,6 +120,53 @@ class EODHelper():
         data_getter = self._get_data_getter(data_type)
         return data_getter.get_data(exchange=exchange, symbols=symbols,
                                     max_requests=max_requests, stale_days=stale_days)
+
+    def _download_data_all(self, func_handle, exchange_id: str = 'US',
+                           n_threads: int = 20, **kwargs) -> None:
+        """Download fundamental equity data for all tickers on an exchange."""
+        
+        def worker(symbol):
+            """This function is used by individual workers to download fundamental data."""
+            func_handle(symbol, exchange_id=exchange_id, **kwargs)
+
+        # create a pool with N threads
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_threads)
+        
+        # Get exchange symbols
+        symbols = self.get_non_excluded_exchange_symbols(exchange_id)
+
+        # submit tasks to the pool
+        for idx, symbol in enumerate(symbols):
+            if idx % 500 == 0:
+                print(idx, symbol)
+            args = (symbol,)
+            pool.submit(worker, *args)
+
+        # wait for all tasks to complete
+        pool.shutdown(wait=True)
+
+    def download_fundamental_equity_all(self,
+                                        exchange_id: str = 'US',
+                                        stale_days: Optional[int] = None,
+                                        n_threads: int = 20) -> None:
+        """Download fundamental equity data for all tickers on an exchange."""
+        self._download_data_all(
+            self.get_fundamental_equity, exchange_id=exchange_id,
+            n_threads=n_threads, stale_days=stale_days)
+
+    def download_historical_data_all(
+            self,
+            exchange_id: str = 'US',
+            start: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
+            end: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
+            frequency: str = '1d',
+            duration: str = '',
+            stale_days: Optional[int] = None,
+            n_threads: int = 20) -> None:
+        """Download fundamental equity data for all tickers on an exchange."""
+        self._download_data_all(
+            self.get_historical_data, exchange_id=exchange_id, n_threads=n_threads,
+            stale_days=stale_days, start=start, end=end, frequency=frequency, duration=duration)
 
 
 class AbstractDataGetter(ABC):
@@ -372,8 +429,8 @@ class AbstractHistoricalTimeSeriesDataGetter(AbstractDataGetter):
             **kwargs) -> str:
         if exchange_id is None:
             raise ValueError('The exchange ID must be provided.')
-        return os.path.join(self.base_path, self.data_type, frequency, 
-                            f'{symbol}_{exchange_id}')
+        return os.path.join(self.base_path, self.data_type, frequency,
+                            exchange_id, symbol)
 
 
 class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):

@@ -1,3 +1,5 @@
+"""Script to quickly download time series data using multiple threads."""
+
 import argparse
 import sys
 import time
@@ -22,30 +24,22 @@ def main(argv):
                         type=str, default='US')
     parser.add_argument("--stale_days", help="Days old cached data is allowed to be.",
                         type=int, default=0)
+    parser.add_argument("--n_threads", type=int, default=20,
+                        help="Number of threads to use for download")                        
     args = parser.parse_args()
-        
+
     eod_helper = EODHelper(
         api_token=API_TOKEN, base_path=BASE_PATH)
 
-    exchange_symbols = eod_helper.get_exchange_symbols(
-        exchange=args.exchange_id)
+    _ = eod_helper.download_historical_data_all(
+        exchange_id=args.exchange_id,
+        stale_days=args.stale_days,
+        n_threads=args.n_threads,
+        start=args.start,
+        end=args.end,
+        duration=args.duration,
+        frequency=args.frequency)
 
-    idx = ~exchange_symbols.Exchange.isin(EXCLUDED_EXCHANGES)
-    symbol_errors = []
-    for symbol in exchange_symbols.loc[idx].Code.values:
-        print(symbol)
-        try:
-            eod_helper.get_historical_data(
-                symbol=symbol, 
-                start=args.start,
-                end=args.end,
-                frequency=args.frequency,
-                duration=args.duration,
-                stale_days=args.stale_days)
-        except KeyError:
-            print(f'Key error for symbol {symbol}')
-            symbol_errors.append(symbol)
-    
     print('======================================================')                
     print(f'Download Complete. Elapsed time = {time.time() - t0}')
     print(f'Errors downloading some symbols: {symbol_errors}')
