@@ -18,18 +18,13 @@ Some stocks have the additional fields 'AnalystRatings' and 'ESGScores'.
 """
 
 from abc import ABC, abstractmethod
+import numpy as np
 
 class AbstractFinancialData(ABC):
     def __init__(self, eod_fund_data_dict: dict, as_of_date: str = '', 
                  frequency: str = 'q'):
         self._data = eod_fund_data_dict
-
-        if frequency not in ('q', 'y'):
-            raise ValueError('Frequency must be quarterly ("q") or yearly ("y").')
-        else:
-            self.frequency = frequency
-            self.frequency_eod = 'quarterly' if frequency == 'q' else 'yearly'
-        
+        self.frequency = frequency
         self.as_of_date = as_of_date
 
     @property
@@ -38,12 +33,27 @@ class AbstractFinancialData(ABC):
         pass
 
     @property
+    def frequency(self):
+        return self._frequency
+
+    @frequency.setter
+    def frequency(self, freq):
+        if freq not in ('q', 'y'):
+            raise ValueError('Frequency must be quarterly ("q") or yearly ("y").')
+        else:
+            self._frequency = freq
+
+    @property
+    def frequency_eod(self):
+        return 'quarterly' if self.frequency == 'q' else 'yearly'
+
+    @property
     def statement_dict(self):
         return self._data['Financials'][self.statement_type][self.frequency_eod]
 
     @property
     def statement(self):
-        return self.statement_dict[self.as_of_date]
+        return self.statement_dict.get(self.as_of_date, dict())
             
     @property
     def available_dates(self):
@@ -56,7 +66,10 @@ class AbstractFinancialData(ABC):
     @as_of_date.setter
     def as_of_date(self, aod):
         if not aod:
-            self._as_of_date = max(self.available_dates)
+            if self.available_dates:
+                self._as_of_date = max(self.available_dates)
+            else:
+                self._as_of_date = ''
         else:
             self._as_of_date = aod
 
@@ -139,7 +152,8 @@ class BalanceSheetData(AbstractFinancialData):
 
     @property
     def currency_symbol(self) -> str:
-        return self.statement.get('currency_symbol', '')
+        val = self.statement.get('currency_symbol', '')
+        return val if val is not None else ''        
 
     @property
     def currentDeferredRevenue(self) -> float:
@@ -148,7 +162,8 @@ class BalanceSheetData(AbstractFinancialData):
 
     @property
     def date(self) -> str:
-        return self.statement.get('date', '')
+        val = self.statement.get('date', '')
+        return val if val is not None else ''        
 
     @property
     def deferredLongTermAssetCharges(self) -> float:
@@ -167,7 +182,8 @@ class BalanceSheetData(AbstractFinancialData):
 
     @property
     def filing_date(self) -> str:
-        return self.statement.get('filing_date', '')
+        val = self.statement.get('filing_date', '')
+        return val if val is not None else ''
 
     @property
     def goodWill(self) -> float:
@@ -406,11 +422,13 @@ class IncomeStatementData(AbstractFinancialData):
 
     @property
     def currency_symbol(self) -> str:
-        return self.statement.get('currency_symbol', '')
+        val = self.statement.get('currency_symbol', '')
+        return val if val is not None else ''        
 
     @property
     def date(self) -> str:
-        return self.statement.get('date', '')
+        val = self.statement.get('date', '')
+        return val if val is not None else ''        
 
     @property
     def depreciationAndAmortization(self) -> float:
@@ -444,7 +462,8 @@ class IncomeStatementData(AbstractFinancialData):
 
     @property
     def filing_date(self) -> str:
-        return self.statement.get('filing_date', '')
+        val = self.statement.get('filing_date', '')
+        return val if val is not None else ''        
 
     @property
     def grossProfit(self) -> float:
@@ -635,11 +654,13 @@ class CashFlowStatementData(AbstractFinancialData):
 
     @property
     def currency_symbol(self) -> str:
-        return self.statement.get('currency_symbol', '')
+        val = self.statement.get('currency_symbol', '')
+        return val if val is not None else ''        
 
     @property
     def date(self) -> str:
-        return self.statement.get('date', '')
+        val = self.statement.get('date', '')
+        return val if val is not None else ''        
 
     @property
     def depreciation(self) -> float:
@@ -663,7 +684,8 @@ class CashFlowStatementData(AbstractFinancialData):
 
     @property
     def filing_date(self) -> str:
-        return self.statement.get('filing_date', '')
+        val = self.statement.get('filing_date', '')
+        return val if val is not None else ''        
 
     @property
     def freeCashFlow(self) -> float:
@@ -885,6 +907,7 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
     def __init__(self, eod_fund_data_dict: dict, as_of_date: str = '', frequency: str = 'q'):
         super(FundamentalEquityData, self).__init__(eod_fund_data_dict)
             
+        self._frequency = frequency
         self.balance_sheet = BalanceSheetData(eod_fund_data_dict, as_of_date=as_of_date,
                                               frequency=frequency)
         self.income_statement = IncomeStatementData(eod_fund_data_dict, as_of_date=as_of_date,
@@ -893,7 +916,10 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
                                                          frequency=frequency)
 
         if not as_of_date:
-            self.as_of_date = max(self.common_financial_dates)
+            if self.common_financial_dates:
+                self.as_of_date = max(self.common_financial_dates)
+            else:
+                self.as_of_date = ''
         else:
             self.as_of_date = as_of_date
 
@@ -904,7 +930,10 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
     @as_of_date.setter
     def as_of_date(self, aod):
         if not aod:
-            self._as_of_date = max(self.common_financial_dates)
+            if self.common_financial_dates:
+                self._as_of_date = max(self.common_financial_dates)
+            else:
+                self._as_of_date = ''
         else:
             self._as_of_date = aod
 
@@ -913,18 +942,26 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
         self.cash_flow_statement.as_of_date = self.as_of_date
 
     @property
+    def frequency(self):
+        return self._frequency
+
+    @frequency.setter
+    def frequency(self, freq):
+        self._frequency = freq
+        self.balance_sheet.frequency = freq
+        self.income_statement.frequency = freq
+        self.cash_flow_statement.frequency = freq
+
+    @property
     def common_financial_dates(self):
         bal_dates = set(self.balance_sheet.available_dates)
         inc_dates = set(self.income_statement.available_dates)
-        cf_dates = set(self.cash_flow_statement.available_dates)
-        return sorted(list(bal_dates.intersection(inc_dates.intersection(cf_dates))))
+        return sorted(list(bal_dates.intersection(inc_dates)))
     
     @property
     def filing_date(self) -> str:
-        return max([self.income_statement.filing_date, 
-                    self.cash_flow_statement.filing_date, 
-                    self.balance_sheet.filing_date
-                   ])
+        return max(self.income_statement.filing_date, 
+                   self.balance_sheet.filing_date)
     
     @property
     def MarketCap(self) -> float:
