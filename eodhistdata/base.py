@@ -168,6 +168,20 @@ class EODHelper():
             self.get_historical_data, exchange_id=exchange_id, n_threads=n_threads,
             stale_days=stale_days, start=start, end=end, frequency=frequency, duration=duration)
 
+    def download_market_cap_all(
+            self,
+            exchange_id: str = 'US',
+            start: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
+            end: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
+            frequency: str = '1d',
+            duration: str = '',
+            stale_days: Optional[int] = None,
+            n_threads: int = 20) -> None:
+        """Download fundamental market cap data for all tickers on an exchange."""
+        self._download_data_all(
+            self.get_market_cap, exchange_id=exchange_id, n_threads=n_threads,
+            stale_days=stale_days, start=start, end=end, frequency=frequency, duration=duration)
+
 
 class AbstractDataGetter(ABC):
     """A class for getting, caching and fetching cached data.
@@ -408,7 +422,7 @@ class AbstractHistoricalTimeSeriesDataGetter(AbstractDataGetter):
                     duration = '730d'
                 else:
                     raise NotImplementedError('Not implemented.')
-            start = end - pd.Timedelta(duration)
+            start = pd.Timestamp(HISTORICAL_DATA_START_DATE)
         else:
             start = pd.Timestamp(start)
 
@@ -452,11 +466,17 @@ class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):
             start: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
             end: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
         ) -> pd.DataFrame:
-        return self.eodhd_client.get_historical_data(
-            symbol=symbol,
-            interval=frequency,
-            range_start=start.strftime('%Y-%m-%d'),
-            range_end=end.strftime('%Y-%m-%d'))
+        try:
+            return self.eodhd_client.get_historical_data(
+                symbol=symbol,
+                interval=frequency,
+                range_start=start.strftime('%Y-%m-%d'),
+                range_end=end.strftime('%Y-%m-%d'))
+        except KeyError:
+            # This exception handling is a hack, as the exception coming
+            # from the historical data request should be better handled at a lower level
+            return pd.DataFrame([], columns=['symbol', 'interval', 'open', 'high', 'low', 
+                                    'close', 'adjusted_close', 'volume'])
 
 
 class MarketCapDataGetter(AbstractHistoricalTimeSeriesDataGetter):

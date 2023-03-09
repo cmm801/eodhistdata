@@ -19,3 +19,6 @@ US_EXCHANGES = [
 
 # A list of exchanges we can ignore
 EXCLUDED_EXCHANGES = ('NMFQS', 'PINK')
+
+# Date from which we should download historical data (if available)
+HISTORICAL_DATA_START_DATE = '1989-12-31'

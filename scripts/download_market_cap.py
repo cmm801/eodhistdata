@@ -1,4 +1,4 @@
-"""Script to quickly download time series data using multiple threads."""
+"""Script to quickly download market cap data using multiple threads."""
 
 import argparse
 import sys
@@ -31,7 +31,7 @@ def main(argv):
     eod_helper = EODHelper(
         api_token=API_TOKEN, base_path=BASE_PATH)
 
-    _ = eod_helper.download_historical_data_all(
+    _ = eod_helper.download_market_cap_all(
         exchange_id=args.exchange_id,
         stale_days=args.stale_days,
         n_threads=args.n_threads,
