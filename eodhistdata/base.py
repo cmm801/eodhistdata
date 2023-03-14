@@ -1,7 +1,6 @@
-"""Define methods for downloading data from eodhistoricaldata.com.
+"""Define methods for analyzing fundamental equity data from eodhistoricaldata.com.
 
-This file contains the core logic used for downloading and caching
-data from eodhistoricaldata.com.
+This file contains the core logic used for analyzing the data.
 """
 
 import concurrent.futures
