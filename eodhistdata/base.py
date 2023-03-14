@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from eod import EodHistoricalData
 from typing import Optional, Union
 
-from eodhistdata.constants import EODDataTypes, US_EXCHANGES, EXCLUDED_EXCHANGES
+from eodhistdata.constants import EODDataTypes, US_EXCHANGES, EXCLUDED_EXCHANGES, HISTORICAL_DATA_START_DATE
 
 
 class EODHelper():
@@ -53,12 +53,17 @@ class EODHelper():
 
     def get_non_excluded_exchange_symbols(self, exchange_id: str = 'US'):
         """Get the list of all symbols in non-excluded exchanges."""
-        exchange_symbols = self.get_exchange_symbols(exchange=exchange_id)
+        exchange_symbols = self.get_exchange_symbols(
+            exchange=exchange_id)
         exchange_symbols = exchange_symbols.query('Type == "Common Stock"')
         idx = exchange_symbols.Code.notna() & exchange_symbols.Exchange.notna()
         exchange_symbols = exchange_symbols.loc[idx]
         idx_good_exchanges = ~exchange_symbols.Exchange.isin(EXCLUDED_EXCHANGES)
-        return list(set(exchange_symbols.loc[idx_good_exchanges, 'Code']))
+        symbols = list(set(exchange_symbols.loc[idx_good_exchanges, 'Code']))
+
+        # Drop symbols with parenthesis (), since we can't get time series for these
+        symbols = [s for s in symbols if '(' not in s]
+        return sorted(symbols)
 
     def get_historical_data(
         self,
@@ -276,8 +281,12 @@ class AbstractDataGetter(ABC):
             as_of_date=as_of_date, stale_days=stale_days, **kwargs)
         _, file_extension = os.path.splitext(filename)
         if file_extension == '.csv':
-            df = pd.read_csv(filename)
-            if 'date' == df.columns[0]:
+            try:
+                df = pd.read_csv(filename)
+            except pd.errors.EmptyDataError:
+                df = pd.DataFrame()
+            
+            if df.size and 'date' == df.columns[0]:
                 df.set_index('date', inplace=True)
                 df.index = pd.DatetimeIndex(df.index)
             return df
@@ -376,8 +385,18 @@ class ExchangeSymbolsDataGetter(AbstractDataGetter):
         return EODDataTypes.EXCHANGE_SYMBOLS.value
 
     # Implementing abstract method
-    def get_data_from_server(self, exchange: Optional[str] = '') -> pd.DataFrame:
-        return self.eodhd_client.get_exchange_symbols(exchange)
+    def get_data_from_server(
+            self, exchange: Optional[str] = '') -> pd.DataFrame:
+        url_listed = self._get_eod_url(exchange=exchange, delisted=False)
+        res_listed = requests.get(url_listed)
+        df_listed = pd.DataFrame(json.loads(res_listed.text))
+        df_listed.loc[:, 'delisted'] = False
+
+        url_delisted = self._get_eod_url(exchange=exchange, delisted=True)
+        res_delisted = requests.get(url_delisted)
+        df_delisted = pd.DataFrame(json.loads(res_delisted.text))
+        df_delisted.loc[:, 'delisted'] = True
+        return pd.concat([df_listed, df_delisted], axis=0)
 
     # Implementing abstract method    
     def get_file_extension_type(self) -> str:
@@ -388,6 +407,11 @@ class ExchangeSymbolsDataGetter(AbstractDataGetter):
         if exchange is None:
             raise ValueError('The exchange ID must be provided.')
         return os.path.join(self.base_path, self.data_type, exchange)
+
+    def _get_eod_url(self, exchange: str, delisted: int = False):
+        """Returns the API endpoint for getting (de)listed exchange symbols."""
+        return ('https://eodhistoricaldata.com/api/exchange-symbol-list/'
+               f'{exchange}?api_token={self.api_token}&fmt=json&delisted={int(delisted)}')
 
 
 class AbstractHistoricalTimeSeriesDataGetter(AbstractDataGetter):

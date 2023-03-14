@@ -19,6 +19,8 @@ Some stocks have the additional fields 'AnalystRatings' and 'ESGScores'.
 
 from abc import ABC, abstractmethod
 import numpy as np
+import pandas as pd
+
 
 class AbstractFinancialData(ABC):
     def __init__(self, eod_fund_data_dict: dict, as_of_date: str = '', 
@@ -915,6 +917,9 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
         self.cash_flow_statement = CashFlowStatementData(eod_fund_data_dict, as_of_date=as_of_date,
                                                          frequency=frequency)
 
+        self._earnings_ts = None
+        self._shares_ts = None
+
         if not as_of_date:
             if self.common_financial_dates:
                 self.as_of_date = max(self.common_financial_dates)
@@ -951,6 +956,7 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
         self.balance_sheet.frequency = freq
         self.income_statement.frequency = freq
         self.cash_flow_statement.frequency = freq
+        self._shares_ts = None
 
     @property
     def common_financial_dates(self):
@@ -971,14 +977,43 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
     def ReturnOnEquity(self) -> float:
         net_income = self.income_statement.netIncome
         total_equity = self.balance_sheet.totalStockholderEquity
-        return net_income / total_equity        
+        return net_income / (1e-10 + total_equity)
 
     @property
     def ReturnOnAssets(self) -> float:
         net_income = self.income_statement.netIncome
         total_assets = self.balance_sheet.totalAssets
-        return net_income / total_assets
+        return net_income / (1e-10 + total_assets)
 
     @property
     def ROIC(self) -> float:
-        return  self.income_statement.NOPAT / self.balance_sheet.netInvestedCapital
+        return  self.income_statement.NOPAT / (1e-10 + self.balance_sheet.netInvestedCapital)
+
+    @property
+    def earnings_ts(self):
+        if self._earnings_ts is None:
+            df = pd.DataFrame(self._data['Earnings']['History']).T
+            df.index = pd.DatetimeIndex(df.index)
+            if not df.empty:
+                df.drop('date', axis=1, inplace=True)
+                df.index.name = 'date'
+                df.sort_index(inplace=True)
+            self._earnings_ts = df
+        return self._earnings_ts  
+
+    @property
+    def shares_ts(self):
+        if self._shares_ts is None:
+            if self.frequency == 'quarterly':
+                freq_str = 'quarterly'
+            else:
+                freq_str = 'annual'
+
+            df = pd.DataFrame(self._data['outstandingShares'][freq_str].values())
+            if not df.empty:
+                df.drop(['date', 'sharesMln'], axis=1, inplace=True)
+                df.set_index('dateFormatted', inplace=True)
+                df.index = pd.DatetimeIndex(df.index)
+                df.sort_index(inplace=True)
+            self._shares_ts = df
+        return self._shares_ts          
