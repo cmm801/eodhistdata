@@ -1003,17 +1003,35 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
 
     @property
     def shares_ts(self):
+        max_change = 0.05
         if self._shares_ts is None:
-            if self.frequency == 'quarterly':
+            if self.frequency == 'q':
                 freq_str = 'quarterly'
             else:
                 freq_str = 'annual'
 
             df = pd.DataFrame(self._data['outstandingShares'][freq_str].values())
-            if not df.empty:
+            if df.empty:
+                self._shares_ts = pd.DataFrame()
+            else:
+                # Clean up the raw data, and sort by date
                 df.drop(['date', 'sharesMln'], axis=1, inplace=True)
                 df.set_index('dateFormatted', inplace=True)
                 df.index = pd.DatetimeIndex(df.index)
+                df.index.name = 'date'
                 df.sort_index(inplace=True)
-            self._shares_ts = df
-        return self._shares_ts          
+
+                ##################################
+                # Prepare to remove any bad points
+                shares = df['shares'].copy()
+                rtns = np.log(shares / shares.shift(1))
+                
+                # Find jumps
+                rtn_abs_avg = (np.abs(rtns) + np.abs(rtns.shift(-1))) / 2
+                rtn_abs_sum = np.abs(rtns + rtns.shift(-1))
+                idx_bad = rtn_abs_sum < rtn_abs_avg / 2
+
+                # Remove bad points and interpolate to replace them
+                shares.loc[idx_bad] = np.nan
+                self._shares_ts = shares.interpolate()
+        return self._shares_ts
