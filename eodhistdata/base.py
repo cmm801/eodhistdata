@@ -230,7 +230,6 @@ class AbstractDataGetter(ABC):
         cached_filename = self.find_cached_data_filename(
             as_of_date=as_of_date, stale_days=stale_days, **kwargs)
         if cached_filename:
-            print('Getting cached data')
             return self.get_data_from_cache(
                 stale_days=stale_days, as_of_date=as_of_date, **kwargs)
         else:
