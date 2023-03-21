@@ -21,6 +21,9 @@ from typing import Optional, Union
 
 from eodhistdata.constants import EODDataTypes, US_EXCHANGES, EXCLUDED_EXCHANGES, HISTORICAL_DATA_START_DATE
 
+MAX_INTRADAY_DURATION = 120  # Max # of days of data that can be made for an intraday request
+INTRADAY_FREQUENCIES = ('1m', '5m', '1h')
+
 
 class EODHelper():
     """A class that allows fetching data from eodhistoricaldata.
@@ -441,12 +444,18 @@ class AbstractHistoricalTimeSeriesDataGetter(AbstractDataGetter):
         if not start:
             if not duration:
                 if frequency == '1d':
-                    duration = '730d'
+                    start = pd.Timestamp(HISTORICAL_DATA_START_DATE)
+                elif frequency in INTRADAY_FREQUENCIES:
+                    duration = f'{MAX_INTRADAY_DURATION}d'
+                    start = end - pd.Timedelta(duration)
                 else:
-                    raise NotImplementedError('Not implemented.')
-            start = pd.Timestamp(HISTORICAL_DATA_START_DATE)
+                    raise NotImplementedError(f'Unsupported frequency: {frequency}')
+
         else:
             start = pd.Timestamp(start)
+            if frequency in INTRADAY_FREQUENCIES:  # Check intraday request is not too big
+                if (end - start) / pd.Timedelta('1d') > MAX_INTRADAY_DURATION:
+                    raise ValueError('Request is too long and must be broken into smaller requests.')
 
         return self.get_time_series_data(
             symbol=f'{symbol}.{exchange_id}', frequency=frequency,
@@ -484,10 +493,23 @@ class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):
     def get_time_series_data(
             self,
             symbol: str, 
+            start: pd.Timestamp,
+            end: pd.Timestamp,
             frequency: str = '1d',
-            start: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
-            end: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
         ) -> pd.DataFrame:
+        if frequency in INTRADAY_FREQUENCIES:
+            return self.get_intraday_time_series_data(symbol, frequency=frequency, start=start, end=end)
+        else:
+            return self.get_daily_time_series_data(symbol, frequency=frequency, start=start, end=end)
+
+    def get_daily_time_series_data(
+            self,
+            symbol: str, 
+            start: pd.Timestamp,
+            end: pd.Timestamp,
+            frequency: str = '1d',
+        ) -> pd.DataFrame:
+        assert frequency == '1d', f'Invalid daily frequency: {frequency}'
         try:
             return self.eodhd_client.get_historical_data(
                 symbol=symbol,
@@ -499,6 +521,29 @@ class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):
             # from the historical data request should be better handled at a lower level
             return pd.DataFrame([], columns=['symbol', 'interval', 'open', 'high', 'low', 
                                     'close', 'adjusted_close', 'volume'])
+
+    def get_intraday_time_series_data(
+            self,
+            symbol: str,
+            start: pd.Timestamp,
+            end: pd.Timestamp,
+            frequency: str = '1m',
+        ) -> pd.DataFrame:
+        if frequency not in INTRADAY_FREQUENCIES:
+            raise ValueError(f'Invalid intraday frequency: {frequency}')
+
+        url = ('https://eodhistoricaldata.com/api/intraday/'
+                f'{symbol}?api_token={self.api_token}&fmt=json'
+                f'&interval={frequency}'
+                f'&from={int(pd.Timestamp(start).timestamp())}'
+                f'&to={int(pd.Timestamp(end).timestamp())}'
+        )
+        response = requests.get(url)
+
+        df = pd.DataFrame(json.loads(response.text))
+        cols = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+        df = df[cols].rename({'datetime': 'date'}, axis=1).set_index('date')
+        return df
 
 
 class MarketCapDataGetter(AbstractHistoricalTimeSeriesDataGetter):
