@@ -20,6 +20,9 @@ Some stocks have the additional fields 'AnalystRatings' and 'ESGScores'.
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
+from typing import Union
+
+from eodhistdata.constants import FundamentalDataTypes, FinancialStatementTypes, FUNDAMENTAL_DATA_TYPE_MAP
 
 
 class AbstractFinancialData(ABC):
@@ -756,7 +759,7 @@ class CashFlowStatementData(AbstractFinancialData):
 
 
 
-class FundamentalEquityDataGeneral(object):
+class FundamentalEquityGeneral(object):
     def __init__(self, eod_fund_data_dict: dict):
         self._data = eod_fund_data_dict
 
@@ -905,9 +908,9 @@ class FundamentalEquityDataGeneral(object):
         return self._data['General']['UpdatedAt']
 
 
-class FundamentalEquityData(FundamentalEquityDataGeneral):
+class FundamentalEquitySnapshot(FundamentalEquityGeneral):
     def __init__(self, eod_fund_data_dict: dict, as_of_date: str = '', frequency: str = 'q'):
-        super(FundamentalEquityData, self).__init__(eod_fund_data_dict)
+        super(FundamentalEquitySnapshot, self).__init__(eod_fund_data_dict)
             
         self._frequency = frequency
         self.balance_sheet = BalanceSheetData(eod_fund_data_dict, as_of_date=as_of_date,
@@ -959,6 +962,10 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
         self._shares_ts = None
 
     @property
+    def frequency_eod(self):
+        return 'quarterly' if self.frequency == 'q' else 'yearly'
+
+    @property
     def common_financial_dates(self):
         bal_dates = set(self.balance_sheet.available_dates)
         inc_dates = set(self.income_statement.available_dates)
@@ -1002,6 +1009,20 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
         return self._earnings_ts  
 
     @property
+    def eps_actual_ts(self):
+        if self.earnings_ts.empty:
+            return pd.Series([], dtype=np.float32)
+        else:
+            return self.earnings_ts['epsActual']
+
+    @property
+    def eps_estimate_ts(self):
+        if self.earnings_ts.empty:
+            return pd.Series([], dtype=np.float32)
+        else:
+            return self.earnings_ts['epsEstimate']
+
+    @property
     def shares_ts(self):
         max_change = 0.05
         if self._shares_ts is None:
@@ -1024,7 +1045,11 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
                 ##################################
                 # Prepare to remove any bad points
                 shares = df['shares'].copy()
-                rtns = np.log(shares / shares.shift(1))
+                idx_zero = np.isclose(shares.values, 0)
+                tol = 1
+                log_arg = shares / (tol + shares.shift(1))
+                log_arg[idx_zero] = np.nan
+                rtns = np.log(log_arg)
                 
                 # Find jumps
                 rtn_abs_avg = (np.abs(rtns) + np.abs(rtns.shift(-1))) / 2
@@ -1033,5 +1058,61 @@ class FundamentalEquityData(FundamentalEquityDataGeneral):
 
                 # Remove bad points and interpolate to replace them
                 shares.loc[idx_bad] = np.nan
-                self._shares_ts = shares.interpolate()
+                self._shares_ts = shares.interpolate()                
         return self._shares_ts
+
+
+class FundamentalEquityTS(FundamentalEquityGeneral):
+    def __init__(self, eod_fund_data_dict: dict, frequency: str = 'q'):
+        super(FundamentalEquityTS, self).__init__(eod_fund_data_dict)
+        self.frequency = frequency
+
+    @property
+    def frequency_eod(self):
+        return 'quarterly' if self.frequency == 'q' else 'yearly'
+
+    def get_time_series(self, data_types: Union[list, str]) -> pd.DataFrame:
+        if isinstance(data_types, str):
+            data_types = [data_types]
+
+        # Create a map from the financial statement type to a list of corresponding data types
+        statement_type_map = {st: [] for st in FinancialStatementTypes._value2member_map_.keys()}
+        for data_type in data_types:
+            statement_type = FUNDAMENTAL_DATA_TYPE_MAP[data_type]
+            statement_type_map[statement_type].append(data_type)
+
+        # For each calculated data type, ensure its dependent series are included
+        calc_data_types = statement_type_map[FinancialStatementTypes.CALCULATED.value]
+        statement_type_map = self._add_dependent_data_types(statement_type_map, calc_data_types)
+
+        ts_list = []
+        for statement_type, sub_data_types in statement_type_map.items():
+            if statement_type == FinancialStatementTypes.CALCULATED.value:
+                continue  # Save the calculated series for last
+
+            raw_ts = dict()
+            for values in self._data['Financials'][statement_type][self.frequency_eod].values():
+                raw_ts[values['date']] = {dt: values[dt] for dt in sub_data_types}
+
+            if raw_ts:
+                ts_list.append(pd.DataFrame(raw_ts, dtype=np.float32).T)
+
+        if not ts_list:
+            underlying_ts = pd.DataFrame([], dtype=np.float32)
+        else:
+            underlying_ts = pd.concat(ts_list, axis=1).astype(np.float32).sort_index()
+
+        # Perform any calculations if necessary
+        return self._add_calculated_time_series(underlying_ts, calc_data_types)
+
+    def _add_dependent_data_types(self, statement_type_map, calc_data_types):
+        if not calc_data_types:
+            return statement_type_map
+        else:
+            raise NotImplementedError()
+
+    def _add_calculated_time_series(self, underlying_ts, calc_data_types):
+        if not calc_data_types:
+            return underlying_ts
+        else:
+            raise NotImplementedError()
