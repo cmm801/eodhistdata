@@ -23,6 +23,7 @@ class TimeSeriesNames(Enum):
     CLOSE = 'close'
     MARKET_CAP = 'market_cap'
     MONTHLY_RETURNS = 'monthly_returns'
+    VOLATILITY = 'volatility'
     VOLUME = 'volume'
 
 
