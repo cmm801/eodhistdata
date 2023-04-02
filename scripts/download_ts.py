@@ -12,7 +12,7 @@ from eodhistdata.private_constants import API_TOKEN, BASE_PATH
 def main(argv):
     t0 = time.time()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start", type=str, default='',
+    parser.add_argument("--start", type=str, default='1999-12-31',
                         help="First date of data to download")
     parser.add_argument("--end", type=str, default='',
                         help="Last date of data to download")
