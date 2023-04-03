@@ -8,7 +8,6 @@ import datetime
 import functools
 import json
 import pandas as pd
-import eodhd.apiclient
 import requests
 import tqdm
 
@@ -33,7 +32,6 @@ class EODHelper():
         self.base_path = base_path
         self._data_getters = dict()
 
-        self.eodhd_client = eodhd.apiclient.APIClient(self.api_token)
         self.eod_client = EodHistoricalData(self.api_token)
 
     def _get_data_getter(self, data_type):
@@ -202,7 +200,6 @@ class AbstractDataGetter(ABC):
         self.base_path = base_path  # where data is cached
         self.default_stale_days = default_stale_days
 
-        self.eodhd_client = eodhd.apiclient.APIClient(self.api_token)
         self.eod_client = EodHistoricalData(self.api_token)        
 
     @property
@@ -363,7 +360,9 @@ class ExchangeListDataGetter(AbstractDataGetter):
 
     # Implementing abstract method
     def get_data_from_server(self) -> pd.DataFrame:
-        return self.eodhd_client.get_exchanges()
+        url = f'https://eodhistoricaldata.com/api/exchanges-list/?api_token={self.api_token}&fmt=json'
+        response = requests.get(url)
+        return pd.DataFrame(json.loads(response.text))
 
     # Implementing abstract method    
     def get_file_extension_type(self) -> str:
@@ -497,54 +496,37 @@ class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):
             end: pd.Timestamp,
             frequency: str = '1d',
         ) -> pd.DataFrame:
-        if frequency in INTRADAY_FREQUENCIES:
-            return self.get_intraday_time_series_data(symbol, frequency=frequency, start=start, end=end)
-        else:
-            return self.get_daily_time_series_data(symbol, frequency=frequency, start=start, end=end)
-
-    def get_daily_time_series_data(
-            self,
-            symbol: str, 
-            start: pd.Timestamp,
-            end: pd.Timestamp,
-            frequency: str = '1d',
-        ) -> pd.DataFrame:
-        assert frequency == '1d', f'Invalid daily frequency: {frequency}'
-        try:
-            return self.eodhd_client.get_historical_data(
-                symbol=symbol,
-                interval=frequency,
-                range_start=start.strftime('%Y-%m-%d'),
-                range_end=end.strftime('%Y-%m-%d'))
-        except KeyError:
-            # This exception handling is a hack, as the exception coming
-            # from the historical data request should be better handled at a lower level
-            return pd.DataFrame([], columns=['symbol', 'interval', 'open', 'high', 'low', 
-                                    'close', 'adjusted_close', 'volume'])
-
-    def get_intraday_time_series_data(
-            self,
-            symbol: str,
-            start: pd.Timestamp,
-            end: pd.Timestamp,
-            frequency: str = '1m',
-        ) -> pd.DataFrame:
-        if frequency not in INTRADAY_FREQUENCIES:
-            raise ValueError(f'Invalid intraday frequency: {frequency}')
-
-        url = ('https://eodhistoricaldata.com/api/intraday/'
-                f'{symbol}?api_token={self.api_token}&fmt=json'
-                f'&interval={frequency}'
-                f'&from={int(pd.Timestamp(start).timestamp())}'
-                f'&to={int(pd.Timestamp(end).timestamp())}'
-        )
+        url = self._get_historical_prices_url(
+            symbol, frequency, start, end)
         response = requests.get(url)
 
         df = pd.DataFrame(json.loads(response.text))
-        cols = ['datetime', 'open', 'high', 'low', 'close', 'volume']
-        df = df[cols].rename({'datetime': 'date'}, axis=1).set_index('date')
-        return df
+        cols = ['open', 'high', 'low', 'close', 'volume']
+        if frequency not in INTRADAY_FREQUENCIES:
+            cols.append('adjusted_close')
+        if 'datetime' in df.columns:
+            df.rename({'datetime': 'date'}, axis=1, inplace=True)
+        df.set_index('date', inplace=True)
+        return df[cols]
 
+    def _get_historical_prices_url(self, symbol,
+            frequency, start, end):
+        if frequency in INTRADAY_FREQUENCIES:
+            freq_arg = 'interval'
+            url_subpath = 'intraday'
+            from_val = int(pd.Timestamp(start).timestamp())
+            to_val = int(pd.Timestamp(end).timestamp())
+        else:
+            freq_arg = 'period'
+            url_subpath = 'eod'
+            from_val = pd.Timestamp(start).strftime('%Y%m%d')
+            to_val = pd.Timestamp(end).strftime('%Y%m%d')
+
+        return (f'https://eodhistoricaldata.com/api/{url_subpath}/'
+                f'{symbol}?api_token={self.api_token}&fmt=json'
+                f'&{freq_arg}={frequency}&from={from_val}&to={to_val}'
+        )        
+            
 
 class MarketCapDataGetter(AbstractHistoricalTimeSeriesDataGetter):
     """A class for caching data and fetching cached data.

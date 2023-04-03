@@ -10,8 +10,9 @@ Distributed under the MIT license. See ``LICENSE`` for more information.
 
 # Overview
 
-This package's core functionality mostly encapsulates other packages'
-existing functionality for fetching data from eodhistoricaldata.com - especially the [eod](https://github.com/LautaroParada/eod-data) and [eodhd](https://github.com/EodHistoricalData/EODHD-APIs-Python-Financial-Library) packages.
+This package's provides an integrated library for downloading and caching data from eodhistoricaldata.com.
+It also includes functions for multi-threaded downloading to speed up the tmie for downloading data
+for lots of different symbols simultaneously. 
 
 There are two main reasons for building this package:
 
