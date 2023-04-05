@@ -500,10 +500,16 @@ class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):
             symbol, frequency, start, end)
         response = requests.get(url)
 
-        df = pd.DataFrame(json.loads(response.text))
         cols = ['open', 'high', 'low', 'close', 'volume']
         if frequency not in INTRADAY_FREQUENCIES:
             cols.append('adjusted_close')
+
+        json_data = json.loads(response.text)
+        if json_data:
+            df = pd.DataFrame(json_data)
+        else:
+            df = pd.DataFrame([], columns=['date'] + cols)
+
         if 'datetime' in df.columns:
             df.rename({'datetime': 'date'}, axis=1, inplace=True)
         df.set_index('date', inplace=True)
