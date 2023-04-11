@@ -21,9 +21,9 @@ class TimeSeriesNames(Enum):
     """Enum with names of some important time series."""
     ADJUSTED_CLOSE = 'adjusted_close'
     CLOSE = 'close'
-    MARKET_CAP = 'market_cap'
-    MONTHLY_RETURNS = 'monthly_returns'
-    VOLATILITY = 'volatility'
+    HIGH = 'high'
+    LOW = 'low'
+    OPEN = 'open'
     VOLUME = 'volume'
 
 

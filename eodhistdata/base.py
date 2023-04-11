@@ -129,7 +129,7 @@ class EODHelper():
     def _download_data_all(self, func_handle, exchange_id: str = 'US',
                            n_threads: int = 20, **kwargs) -> None:
         """Download fundamental equity data for all tickers on an exchange."""
-        
+
         def worker(symbol):
             """This function is used by individual workers to download fundamental data."""
             func_handle(symbol, exchange_id=exchange_id, **kwargs)
