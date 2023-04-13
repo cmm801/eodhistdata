@@ -61,8 +61,9 @@ class EODHelper():
         idx_good_exchanges = ~exchange_symbols.Exchange.isin(EXCLUDED_EXCHANGES)
         symbols = list(set(exchange_symbols.loc[idx_good_exchanges, 'Code']))
 
-        # Drop symbols with parenthesis (), since we can't get time series for these
-        symbols = [s for s in symbols if '(' not in s]
+        # Drop symbols containing punctuation since we can't get time series for these
+        excluded_punctuation = ['.', '(', '/']
+        symbols = [s for s in symbols if not any([p in s for p in excluded_punctuation])]
         return sorted(symbols)
 
     def get_historical_data(
@@ -233,7 +234,7 @@ class AbstractDataGetter(ABC):
             return self.get_data_from_cache(
                 stale_days=stale_days, as_of_date=as_of_date, **kwargs)
         else:
-            print('Fetching')
+            print('Fetching', kwargs)
             data = self.get_data_from_server(**kwargs)
             self.cache_data(data, as_of_date=as_of_date, **kwargs)
             return data
@@ -513,6 +514,7 @@ class HistoricalTimeSeriesDataGetter(AbstractHistoricalTimeSeriesDataGetter):
         if 'datetime' in df.columns:
             df.rename({'datetime': 'date'}, axis=1, inplace=True)
         df.set_index('date', inplace=True)
+        df.index = pd.DatetimeIndex(df.index)
         return df[cols]
 
     def _get_historical_prices_url(self, symbol,
