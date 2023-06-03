@@ -7,11 +7,12 @@ import concurrent.futures
 import datetime
 import functools
 import json
+import os
 import pandas as pd
 import requests
 import tqdm
 
-import os
+from collections.abc import Iterable
 from typing import Optional, Union
 
 from abc import ABC, abstractmethod
@@ -128,7 +129,8 @@ class EODHelper():
                                     max_requests=max_requests, stale_days=stale_days)
 
     def _download_data_all(self, func_handle, exchange_id: str = 'US',
-                           n_threads: int = 20, **kwargs) -> None:
+                           n_threads: int = 20, symbol_list: Optional[Iterable] = None,
+                           **kwargs) -> None:
         """Download fundamental equity data for all tickers on an exchange."""
 
         def worker(symbol):
@@ -137,9 +139,12 @@ class EODHelper():
 
         # create a pool with N threads
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_threads)
-        
-        # Get exchange symbols
-        symbols = self.get_non_excluded_exchange_symbols(exchange_id)
+
+        if symbol_list is None:
+            # Get exchange symbols 
+            symbols = self.get_non_excluded_exchange_symbols(exchange_id)
+        else:
+            symbols = symbol_list
 
         # submit tasks to the pool
         for idx, symbol in enumerate(symbols):
@@ -154,11 +159,12 @@ class EODHelper():
     def download_fundamental_equity_all(self,
                                         exchange_id: str = 'US',
                                         stale_days: Optional[int] = None,
-                                        n_threads: int = 20) -> None:
+                                        n_threads: int = 20,
+                                        symbol_list: Optional[Iterable] = None) -> None:
         """Download fundamental equity data for all tickers on an exchange."""
         self._download_data_all(
             self.get_fundamental_equity, exchange_id=exchange_id,
-            n_threads=n_threads, stale_days=stale_days)
+            n_threads=n_threads, stale_days=stale_days, symbol_list=symbol_list)
 
     def download_historical_data_all(
             self,
@@ -168,11 +174,13 @@ class EODHelper():
             frequency: str = '1d',
             duration: str = '',
             stale_days: Optional[int] = None,
-            n_threads: int = 20) -> None:
+            n_threads: int = 20,
+            symbol_list: Optional[Iterable] = None) -> None:
         """Download fundamental equity data for all tickers on an exchange."""
         self._download_data_all(
             self.get_historical_data, exchange_id=exchange_id, n_threads=n_threads,
-            stale_days=stale_days, start=start, end=end, frequency=frequency, duration=duration)
+            stale_days=stale_days, symbol_list=symbol_list,
+            start=start, end=end, frequency=frequency, duration=duration)
 
     def download_market_cap_all(
             self,
@@ -182,11 +190,13 @@ class EODHelper():
             frequency: str = '1d',
             duration: str = '',
             stale_days: Optional[int] = None,
-            n_threads: int = 20) -> None:
+            n_threads: int = 20,
+            symbol_list: Optional[Iterable] = None) -> None:
         """Download fundamental market cap data for all tickers on an exchange."""
         self._download_data_all(
             self.get_market_cap, exchange_id=exchange_id, n_threads=n_threads,
-            stale_days=stale_days, start=start, end=end, frequency=frequency, duration=duration)
+            stale_days=stale_days, symbol_list=symbol_list,
+            start=start, end=end, frequency=frequency, duration=duration)
 
 
 class AbstractDataGetter(ABC):
