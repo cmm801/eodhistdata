@@ -3,23 +3,21 @@
 This file contains the core logic used for analyzing the data.
 """
 
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from typing import Optional, Union
+
 import concurrent.futures
 import datetime
-import functools
 import json
 import os
 import pandas as pd
 import requests
 import tqdm
 
-from collections.abc import Iterable
-from typing import Optional, Union
-
-from abc import ABC, abstractmethod
 from eod import EodHistoricalData
-from typing import Optional, Union
-
 from eodhistdata.constants import EODDataTypes, US_EXCHANGES, EXCLUDED_EXCHANGES, HISTORICAL_DATA_START_DATE
+
 
 MAX_INTRADAY_DURATION = 120  # Max # of days of data that can be made for an intraday request
 INTRADAY_FREQUENCIES = ('1m', '5m', '1h')
@@ -211,7 +209,7 @@ class AbstractDataGetter(ABC):
         self.base_path = base_path  # where data is cached
         self.default_stale_days = default_stale_days
 
-        self.eod_client = EodHistoricalData(self.api_token)        
+        self.eod_client = EodHistoricalData(self.api_token)
 
     @property
     @abstractmethod
@@ -231,7 +229,7 @@ class AbstractDataGetter(ABC):
         pass
 
     def get_data(
-            self, 
+            self,
             as_of_date: Union[str, datetime.date, datetime.datetime, pd.Timestamp] = '',
             stale_days: Optional[int] = None, **kwargs):
         # If user specifies stale days, use it instead of default
@@ -248,7 +246,7 @@ class AbstractDataGetter(ABC):
             data = self.get_data_from_server(**kwargs)
             self.cache_data(data, as_of_date=as_of_date, **kwargs)
             return data
-    
+
     def cache_data(
             self,
             data: Union[dict, pd.DataFrame],
@@ -294,7 +292,7 @@ class AbstractDataGetter(ABC):
                 df = pd.read_csv(filename)
             except pd.errors.EmptyDataError:
                 df = pd.DataFrame()
-            
+
             if df.size and 'date' == df.columns[0]:
                 df.set_index('date', inplace=True)
                 df.index = pd.DatetimeIndex(df.index)
@@ -323,14 +321,13 @@ class AbstractDataGetter(ABC):
             stale_days = self.default_stale_days
 
         # Find the most recent cached data that is allowable by stale_days
-        as_of_date_str = as_of_date.strftime('%Y%m%d')
         data_path = self.get_cached_data_path(**kwargs)
 
         # Check if no data has been cached on this filepath
         if not os.path.isdir(data_path):
             return ''
 
-        # Get the most recent cached date        
+        # Get the most recent cached date
         cached_date_str_list = sorted(os.listdir(data_path))
         oldest_date = as_of_date - pd.Timedelta(stale_days, unit='d')
         target_date_str = ''
@@ -339,8 +336,8 @@ class AbstractDataGetter(ABC):
             if cached_date > as_of_date:
                 break
             if oldest_date <= cached_date:
-                target_date_str = cached_date_str        
-        
+                target_date_str = cached_date_str
+
         if target_date_str:
             return self.create_cached_data_filename(
                 as_of_date=target_date_str, **kwargs)
