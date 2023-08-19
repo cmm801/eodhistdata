@@ -63,6 +63,10 @@ class EODHelper():
         # Drop symbols containing punctuation since we can't get time series for these
         excluded_punctuation = ['.', '(', '/']
         symbols = [s for s in symbols if not any([p in s for p in excluded_punctuation])]
+
+        # Don't include symbols that start with certain symbols
+        excluded_start_punctuation = ['-']
+        symbols = [s for s in symbols if not any([s.startswith(p) for p in excluded_start_punctuation])]
         return sorted(symbols)
 
     def get_historical_data(
