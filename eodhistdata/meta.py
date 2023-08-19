@@ -8,7 +8,8 @@ from eodhistdata.constants import EODDataTypes
 from eodhistdata.private_constants import BASE_PATH
 
 
-def get_historical_meta_data(base_path):
+def get_historical_meta_data():
+    """Get meta-data about the historical data that has been downloaded."""
     hist_base_path = os.path.join(BASE_PATH, EODDataTypes.HISTORICAL_TIME_SERIES.value)
     frequencies = os.listdir(hist_base_path)
 
@@ -37,6 +38,24 @@ def get_historical_meta_data(base_path):
 
     df_summary = pd.DataFrame(summary_list)
 
-    n_days_since_last_obs = (pd.DatetimeIndex(df_summary.as_of_date) - pd.DatetimeIndex(df_summary.last_date)) / pd.Timedelta('1d')
-    df_summary['is_active'] = (n_days_since_last_obs < 10)
+    delta = pd.DatetimeIndex(df_summary.as_of_date) - pd.DatetimeIndex(df_summary.last_date)
+    n_days_since_last_obs = delta / pd.Timedelta('1d')
+    df_summary['is_active'] = n_days_since_last_obs < 10
     return df_summary
+
+def remove_empty_directories(data_type: str, frequency: str = '1d',
+                             exchange_id: str = 'US') -> int:
+    """Remove empty data directories."""
+    base_path = os.path.join(BASE_PATH, data_type, frequency, exchange_id)
+    tickers = os.listdir(base_path)
+
+    count = 0
+    for ticker in tickers:
+        subpath = os.path.join(base_path, ticker)
+        dates = os.listdir(subpath)
+        for date in dates:
+            datepath = os.path.join(subpath, date)
+            if not os.listdir(datepath):
+                os.rmdir(datepath)
+                count += 1
+    return count
