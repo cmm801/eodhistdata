@@ -1,6 +1,8 @@
-"""Provides a set of functions for getting meta-data about the historical data that has been downloaded.
+"""Provides a set of functions for getting meta-data about the 
+historicaldata that has been downloaded.
 """
 
+import json
 import os
 import pandas as pd
 
@@ -18,7 +20,9 @@ def get_historical_meta_data():
         hist_freq_path = os.path.join(hist_base_path, frequency)
         exchanges = os.listdir(hist_freq_path)
         for exchange_id in exchanges:
-            hist_ts_path = os.path.join(BASE_PATH, EODDataTypes.HISTORICAL_TIME_SERIES.value, frequency, exchange_id)
+            hist_ts_path = os.path.join(
+                BASE_PATH, EODDataTypes.HISTORICAL_TIME_SERIES.value,
+                frequency, exchange_id)
             symbols = os.listdir(hist_ts_path)
 
             for symbol in symbols:
@@ -28,7 +32,7 @@ def get_historical_meta_data():
                 file_names = os.listdir(file_path)
                 assert len(file_names) == 1, 'Should only be one file name per directory.'
                 df = pd.read_csv(os.path.join(file_path, file_names[0]))
-                summary_list.append(dict(symbol=symbol, 
+                summary_list.append(dict(symbol=symbol,
                                          frequency=frequency,
                                          exchange_id=exchange_id,
                                          as_of_date=pd.Timestamp(max_date),
@@ -59,3 +63,45 @@ def remove_empty_directories(data_type: str, frequency: str = '1d',
                 os.rmdir(datepath)
                 count += 1
     return count
+
+def get_fundamantal_data_summary():
+    """Get meta-data about the fundamental data that has been downloaded."""
+    summary_list = []
+    empty_list = []
+    no_files = []
+
+    hist_base_path = os.path.join(BASE_PATH, EODDataTypes.FUNDAMENTAL_EQUITY.value)
+    exchanges = os.listdir(hist_base_path)
+    for exchange_id in exchanges:
+        hist_ts_path = os.path.join(hist_base_path, exchange_id)
+        symbols = os.listdir(hist_ts_path)
+        for symbol in sorted(symbols):
+            dates = os.listdir(os.path.join(hist_ts_path, symbol))
+            max_date = max(dates)
+            file_path = os.path.join(hist_ts_path, symbol, max_date)
+            file_names = os.listdir(file_path)
+
+            if len(file_names) == 0:
+                no_files.append(file_path)
+                continue
+
+            filename = os.path.join(file_path, file_names[0])
+            gen_info = _process_fundamental_data_for_file(filename)
+            if len(gen_info) > 0:
+                summary_list.append(gen_info)
+            else:
+                empty_list.append(symbol)
+
+        df_fund_summary = pd.concat(summary_list, axis=1).T
+        return df_fund_summary, empty_list, no_files
+
+def _process_fundamental_data_for_file(filename):
+    """Process the fundamental data for a single file."""
+    cols_to_drop = ['Description', 'AddressData', 'Listings', 'Officers']    
+    with open (filename, "r", encoding='utf-8') as f:
+        data = json.loads(f.read())
+        if not data:
+            return pd.Series([], dtype=float)
+        gen_data = {k: v for k, v in data['General'].items() if k not in cols_to_drop}
+        gen_info = pd.Series(gen_data)
+    return gen_info
